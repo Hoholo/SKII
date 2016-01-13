@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <signal.h>
 #define CLIENT_BUF_SIZE 5
 #define ARGC -1
 #define FILE_DOESNT_EXISTS -2
@@ -50,6 +51,7 @@ bool arg_check(int argc, char *argv[]) {
 	return true;
 }
 int main(int argc, char *argv[]) {
+	signal(SIGPIPE, SIG_IGN);
 	// checking
 	int errors = 0;
 	if(arg_check(argc, argv) != true) return ARGC;
@@ -86,7 +88,7 @@ int main(int argc, char *argv[]) {
 		return 	EPOLL_ERROR;
 	} 
 	cout << "Connected to the server" << endl;
-	int answer = 0;
+	//int answer = 0;
 	int *position = new int;
 	char *prog_bufor = new char[100];
 	char *without_a_flag = bufer+1;
@@ -106,11 +108,15 @@ int main(int argc, char *argv[]) {
 				close(epoll_handler);
 				return 	SERVER_DISCONNECT;		
 			}
-			answer = read(server, bufer, CLIENT_BUF_SIZE);
+			read(server, bufer, CLIENT_BUF_SIZE);
 			switch(bufer[0]) {
 				case ACCEPTED:
 					cout << "The server said hi" << endl;
 					break;
+                                case POSITION:
+                                        memcpy(position, bufer+1, sizeof(int));
+                                        cout << "your position: " << *position << endl;
+                                        break;
 				case SEND_PROG:
 					file.open(argv[1], ios::in);		
 					if(!file.is_open()) {
@@ -122,9 +128,14 @@ int main(int argc, char *argv[]) {
 					else { 
 						cout << "Sending a program" << endl;
 						do {
+							//sleep(1);
 							file.read(prog_bufor, 100);
-							write(server, prog_bufor, file.gcount());
+							if(write(server, prog_bufor, file.gcount()) == EPIPE) { 
+								cout << "The server is offline" << endl;
+								ok=false;							
+							}
 						} while(file.gcount() > 0);
+						cout << "Sent" << endl;
 					}
 					break;		
 				case RESULT:
@@ -134,10 +145,6 @@ int main(int argc, char *argv[]) {
 						cout << prog_bufor;					
 					}
 					ok=false;
-					break;
-				case POSITION:
-					memcpy(position, bufer+1, sizeof(int));
-					cout << "your position: " << *position << endl;
 					break;
 				case PROG_RCV:
 					cout << "Program sent" << endl;

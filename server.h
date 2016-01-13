@@ -75,9 +75,13 @@ void JobScheduler::queue_send(unsigned int where_to_start) {
 	////////////////////////////////
 	clients_list.lock();
 	for(list<int>::iterator iter=clients.begin(); iter != clients.end(); iter++) {
-		write(*iter, to_send, sizeof(int)+sizeof(char));
-		pos->my_pos_int++;
-		memcpy(pointer, pos->my_pos_char, sizeof(int));
+		if(write(*iter, to_send, sizeof(int)+sizeof(char)) == EPIPE) {
+			clients.erase(iter);
+		}
+		else {
+			pos->my_pos_int++;
+			memcpy(pointer, pos->my_pos_char, sizeof(int));
+		}
 	}
 	clients_list.unlock();
 	//////////////////////////////
