@@ -130,11 +130,17 @@ bool JobScheduler::read_args(int sock_id) {
 	char *blocks_of_data = new char[100];
 	int how_many = 0;
 	string argument;
+	string sub;
+	argument.clear();
 	size_t finder = string::npos;
 	while(finder == string::npos) {
-		how_many = read(sock_id, blocks_of_data, 100);
+		how_many = read(sock_id, blocks_of_data, 100);		
 		if(how_many == 0) break;
-		argument += blocks_of_data;
+		sub = blocks_of_data;
+		argument += sub.substr(0, how_many);
+		for(int i=0; i<100; i++) {
+			blocks_of_data[i] = 0;
+		}
 		finder = argument.find(ARG_END);
 	}
 	// obrobka
