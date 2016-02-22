@@ -1,6 +1,6 @@
 #include "flags.h"
-#include<iostream>
-#include<fstream>
+#include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <sys/poll.h>
 #include <sys/types.h>
@@ -16,6 +16,7 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <signal.h>
+#include <vector>
 #define CLIENT_BUF_SIZE 5
 #define ARGC -1
 #define FILE_DOESNT_EXISTS -2
@@ -24,6 +25,7 @@
 #define IS_NOT_EXECUTABLE -5
 #define EPOLL_ERROR -6
 #define SERVER_DISCONNECT -7
+#define FILE_CRASH -8
 using namespace std;
 char bufer[CLIENT_BUF_SIZE];
 void clear(char *pointer, unsigned int size);
@@ -44,17 +46,36 @@ int file_check(char *file_name) {
 	return true;
 }
 bool arg_check(int argc, char *argv[]) {
-	if(argc != 2) {
-		cout << "./client file_you_want_to_send" << endl;			
+	if(argc < 2) {
+		cout << "./client file_you_want_to_send arg1 arg2 ..." << endl;			
 		return false;
 	}
 	return true;
 }
 int main(int argc, char *argv[]) {
 	signal(SIGPIPE, SIG_IGN);
+	vector<string> args;
 	// checking
 	int errors = 0;
 	if(arg_check(argc, argv) != true) return ARGC;
+	if(argc == 2) {
+		cout << "No arguments" << endl;
+		string back;
+		back += (char)ARG_END;	
+		args.push_back(back);
+	}
+	else {
+		for(int i=2; i<argc; i++) {
+			args.push_back(argv[i]);
+			if((i+1) == argc) {
+				args[i-2] += (char)ARG_END;		
+			}	
+			else args[i-2]+=(char)ARG_SEPARATOR;	
+		}
+	}
+	//string back;
+	//back+=(char)ARG_END;
+	//args.push_back(back);
 	if((errors=file_check(argv[1])) != true) return errors;
 	int epoll_handler;
 	if((epoll_handler= epoll_create(1)) < 0) {
@@ -93,22 +114,35 @@ int main(int argc, char *argv[]) {
 	char *prog_bufor = new char[100];
 	char *without_a_flag = bufer+1;
 	bool ok=true;
+	int answer;
 	while(ok) {
 		int result = epoll_wait(epoll_handler, &event_wait, 3, -1);
 		if(result >= 0) {
 			if(event_wait.events & EPOLLERR) {
 				cout << "Something has happened with the server! " << endl;
+				delete position;
+				delete [] prog_bufor;
 				close(server);
 				close(epoll_handler);
 				return EPOLL_ERROR;	
 			}
 			if(event_wait.events & EPOLLHUP) {
 				cout << "Server is down" << endl;
+				delete position;
+				delete [] prog_bufor;
 				close(server);
 				close(epoll_handler);
 				return 	SERVER_DISCONNECT;		
 			}
-			read(server, bufer, CLIENT_BUF_SIZE);
+			answer = read(server, bufer, CLIENT_BUF_SIZE);
+			if(answer == 0) {
+				cout << "Something has happened with the server! " << endl;
+				delete position;
+				delete [] prog_bufor;
+				close(server);
+				close(epoll_handler);
+				return EPOLL_ERROR;			
+			}
 			switch(bufer[0]) {
 				case ACCEPTED:
 					cout << "The server said hi" << endl;
@@ -126,6 +160,9 @@ int main(int argc, char *argv[]) {
 						return FILE_DOESNT_EXISTS;
 					}
 					else { 
+						file.seekg(0, ios_base::end);
+						int size = file.tellg();
+						file.seekg(0, ios_base::beg);
 						cout << "Sending a program" << endl;
 						do {
 							//sleep(1);
@@ -134,10 +171,29 @@ int main(int argc, char *argv[]) {
 								cout << "The server is offline" << endl;
 								ok=false;							
 							}
+							size-=file.gcount();
 						} while(file.gcount() > 0);
-						cout << "Sent" << endl;
+						if(size==0) {
+							cout << "The whole file has been sent" << endl;		
+						}
+						else {
+							cout << "The whole file hasnt been sent" << endl;
+							cout << "missed: " << size << " bytes" << endl;
+							close(server);
+							close(epoll_handler);
+							return FILE_CRASH;
+						}
 					}
-					break;		
+					break;
+				case SEND_ARGS:
+					cout << "Sending args" << endl;
+					for(unsigned int i=0; i<args.size(); i++) {
+#ifdef DEBUG
+						cout << args[i].c_str() << " ";
+#endif
+						write(server, args[i].c_str(), args[i].size());
+					}			
+					cout << "\nArgs sent" << endl;
 				case RESULT:
 					cout << without_a_flag;
 					clear(prog_bufor, 100);

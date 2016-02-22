@@ -8,5 +8,8 @@
 #define OK 32
 #define PROG_RCV 64
 #define PROBLEM 5
+#define SEND_ARGS 6
+#define ARG_SEPARATOR 0x02
+#define ARG_END 0x03
 #endif
 
