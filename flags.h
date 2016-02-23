@@ -11,5 +11,6 @@
 #define SEND_ARGS 6
 #define ARG_SEPARATOR 0x02
 #define ARG_END 0x03
+#define FILE_SEP 0x04
 #endif
 

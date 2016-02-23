@@ -114,7 +114,7 @@ bool JobScheduler::read_and_save(int sock_id) {
 	while(true) {
 		sleep(1);
 		how_many = read(sock_id, blocks_of_data, 100);
-		if(how_many == 0) break;
+		if(how_many == 0 || how_many == -1) break;
 		program.write(blocks_of_data, how_many);
 		if(how_many < 100) break;
 		if(blocks_of_data[99] == EOF) break;
@@ -122,7 +122,7 @@ bool JobScheduler::read_and_save(int sock_id) {
 	///////////////////////////////////////////////////////////
 	delete [] blocks_of_data;
 	program.close();
-	if(how_many==0) return false;
+	if(how_many==0 || how_many == -1) return false;
 	else return true; // 
 }
 bool JobScheduler::read_args(int sock_id) {
@@ -135,9 +135,8 @@ bool JobScheduler::read_args(int sock_id) {
 	size_t finder = string::npos;
 	while(finder == string::npos) {
 		how_many = read(sock_id, blocks_of_data, 100);		
-		if(how_many == 0) break;
-		sub = blocks_of_data;
-		argument += sub.substr(0, how_many);
+		if(how_many == 0 || how_many == -1) break;
+		argument.append(blocks_of_data,how_many);
 		for(int i=0; i<100; i++) {
 			blocks_of_data[i] = 0;
 		}
@@ -166,7 +165,7 @@ bool JobScheduler::read_args(int sock_id) {
 	}
 	/////////
 	delete [] blocks_of_data;
-	if(how_many == 0) return false;
+	if(how_many == 0 || how_many == -1) return false;
 	else return true;
 }
 void JobScheduler::send_result(int sock_id) {
@@ -174,7 +173,7 @@ void JobScheduler::send_result(int sock_id) {
 	result.open("result.txt", ios::in);
 	if(!errors.is_open() || !result.is_open()) {
 		cout << "Cant open result files!\n";
-		char problem[] = "Unfortunately, cant open result files\n";
+		const char problem[] = "Unfortunately, cant open result files\n";
 		write(sock_id, problem, strlen(problem));
 	}
 	else {
@@ -183,6 +182,8 @@ void JobScheduler::send_result(int sock_id) {
 			result.read(blocks_of_data, 100);
 			if(write(sock_id, blocks_of_data, result.gcount()) == EPIPE) break; // nikt nie slucha
 		} while(result.gcount() > 0);
+		blocks_of_data[0] = FILE_SEP;
+		write(sock_id, blocks_of_data, 1);
 		do {
 			errors.read(blocks_of_data, 100);
 			if(write(sock_id, blocks_of_data, errors.gcount()) == EPIPE) break;
@@ -194,20 +195,24 @@ void JobScheduler::send_result(int sock_id) {
 }
 void JobScheduler::download_and_execute() {
 	unsigned char flag_to_send;
-	char *blocks_of_data = new char[100];
+	//char *blocks_of_data = new char[100];
 	while(true) {
 		while(clients.empty());
 		int first = clients.front();
 		flag_to_send = SEND_PROG;
 		write(first, &flag_to_send, 1);
 		cout << "Waiting for a file" << endl;
-		if(read_and_save(first) == false) cout << "Lost connection!!" << endl;
+		if(read_and_save(first) == false) {
+			cout << "Reading error" << endl;
+		} 
 		else {
 			cout << "Program received" << endl;
 			/////////////////////////////////
 			flag_to_send = SEND_ARGS;
 			write(first, &flag_to_send, 1);
-			if(read_args(first) == false) cout << "Lost connection!!" << endl;
+			if(read_args(first) == false) {
+				cout << "Reading error" << endl;			
+			} 
 			else {
 				flag_to_send = PROG_RCV;
 				write(first, &flag_to_send, 1);
@@ -222,6 +227,7 @@ void JobScheduler::download_and_execute() {
 				flag_to_send = RESULT;
 				write(first, &flag_to_send, 1);
 				cout << "Wysylanie odpowiedzi" << endl;
+				sleep(20);
 				send_result(first);// wysylanie rezultatu
 				cout << "Zakonczono" << endl;
 			}
@@ -233,7 +239,7 @@ void JobScheduler::download_and_execute() {
 		args.clear();
 		queue_send();
 	}
-	delete [] blocks_of_data;
+	//delete [] blocks_of_data;
 }
 void JobScheduler::clientHandler(int sock_id, int pos_start) { // ?
 	//thread(&JobScheduler::guard_queue, this, sock_id).detach();
@@ -251,13 +257,12 @@ void JobScheduler::clientHandler(int sock_id, int pos_start) { // ?
 	unsigned char *help = to_send+1;
 	memcpy(help, pozycja.my_pos_char, sizeof(int));
 	write(sock_id, to_send, sizeof(int)+1);
-	while(true);
-	help=NULL;
+	delete [] to_send;
 }
 JobScheduler::JobScheduler(int port, int max_clients) {
 	set = false;
 	sck_addr.sin_family = AF_INET;
-	sck_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	sck_addr.sin_addr.s_addr = INADDR_ANY;
 	sck_addr.sin_port = htons(port);
 	if((serv_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		throw ErrorClass(serv_socket, "Blad funkcji socker()");

@@ -65,18 +65,18 @@ int main(int argc, char *argv[]) {
 		args.push_back(back);
 	}
 	else {
-		for(int i=2; i<argc; i++) {
+		for(int i=3; i<argc; i++) {
 			args.push_back(argv[i]);
 			if((i+1) == argc) {
-				args[i-2] += (char)ARG_END;		
+				args[i-3] += (char)ARG_END;		
 			}	
-			else args[i-2]+=(char)ARG_SEPARATOR;	
+			else args[i-3]+=(char)ARG_SEPARATOR;	
 		}
 	}
 	//string back;
 	//back+=(char)ARG_END;
 	//args.push_back(back);
-	if((errors=file_check(argv[1])) != true) return errors;
+	if((errors=file_check(argv[2])) != true) return errors;
 	int epoll_handler;
 	if((epoll_handler= epoll_create(1)) < 0) {
 		cout << "epoll error" << endl;
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
 	//////////////////////////////////////////////// Connecting
 	cout << "Connecting to the server" << endl;
 	sck_addr.sin_family = AF_INET;
-	inet_aton("127.0.0.1", &sck_addr.sin_addr);
+	inet_aton(argv[1], &sck_addr.sin_addr); // adres argv[1]
 	sck_addr.sin_port = htons(5534);
 	if((server=socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		cout << "cant create a socket" << endl;
@@ -115,6 +115,9 @@ int main(int argc, char *argv[]) {
 	char *without_a_flag = bufer+1;
 	bool ok=true;
 	int answer;
+	string result_s;
+	unsigned int how_many = 0;
+	unsigned int pos = 0;
 	while(ok) {
 		int result = epoll_wait(epoll_handler, &event_wait, 3, -1);
 		if(result >= 0) {
@@ -152,9 +155,9 @@ int main(int argc, char *argv[]) {
                                         cout << "your position: " << *position << endl;
                                         break;
 				case SEND_PROG:
-					file.open(argv[1], ios::in);		
+					file.open(argv[2], ios::in);		
 					if(!file.is_open()) {
-						cout << "The file: " << argv[1] << " doesnt exists" << endl;
+						cout << "The file: " << argv[2] << " doesnt exists" << endl;
 						close(server);
 						close(epoll_handler);
 						return FILE_DOESNT_EXISTS;
@@ -197,8 +200,28 @@ int main(int argc, char *argv[]) {
 				case RESULT:
 					cout << without_a_flag;
 					clear(prog_bufor, 100);
+					//result_s.clear();
+					cout << "Wynik:" << endl;
+					while((how_many = read(server, prog_bufor, 100)) > 0) {
+						result_s.clear();
+						result_s.append(prog_bufor, how_many);
+						//cout << prog_bufor;
+						if((pos = result_s.find(FILE_SEP)) != string::npos) {
+							cout << result_s.substr(0, pos-1); 
+							break;						
+						}
+						else cout << result_s;
+						//clear(prog_bufor, 100);					
+					}
+					cout << endl;
+					cout << "Bledy:" << endl;
+					cout << result_s.substr(pos+1, result_s.size()-pos+1);
+					////////// ???
+					clear(prog_bufor, 100);
 					while(read(server, prog_bufor, 100) > 0) {
-						cout << prog_bufor;					
+						result_s.clear();
+						result_s.append(prog_bufor, how_many);
+						cout << result_s;
 					}
 					ok=false;
 					break;

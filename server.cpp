@@ -1,5 +1,6 @@
 #include "server.h"
 #include <ctime>
+#include <sys/stat.h>
 #include <signal.h>
 JobScheduler *x = NULL;
 int main() {
@@ -14,6 +15,7 @@ int main() {
 		plik.close();
 		plik.open("to_execute.out", ios::out);
 		if(!plik.is_open()) throw ErrorClass(-1, "Nie udalo sie utworzyc to_execute.out");
+		if(chmod("to_execute.out", 00774) < 0) throw ErrorClass(-1, "Nie mozna zmienic praw pliku to_execute.out");
 		plik.close();
 		JobScheduler *server = new JobScheduler(5534, 50);
 		x = server;
